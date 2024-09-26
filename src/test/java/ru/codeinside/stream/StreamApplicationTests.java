@@ -5,6 +5,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
+import ru.codeinside.stream.entity.Customer;
 import ru.codeinside.stream.entity.Order;
 import ru.codeinside.stream.entity.Product;
 import ru.codeinside.stream.repository.CustomerRepository;
@@ -15,9 +16,13 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneId;
 import java.util.Comparator;
+import java.util.DoubleSummaryStatistics;
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.function.Predicate;
 import java.util.stream.Collectors;
+import java.util.stream.DoubleStream;
 
 @Slf4j
 @DataJpaTest
@@ -143,6 +148,12 @@ class StreamApplicationTests {
         //double result;
         //TODO
         //log.info("Общая сумма = " + result);
+        double result = orderRepository.findAll().stream().filter(p->
+                p.getOrderDate().isAfter(LocalDate.of(2022,3,31)) &&
+                p.getOrderDate().isBefore(LocalDate.of(2022,5,1))).flatMapToDouble(
+                        p-> DoubleStream.of(p.getProducts().stream().mapToDouble(s->s.getPrice()).sum())
+        ).sum();
+        log.info("Общая сумма = " + result);
     }
 
     @Test
@@ -151,14 +162,29 @@ class StreamApplicationTests {
         //double result;
         //TODO
         //log.info("Средняя цена = " + result);
+        long count = orderRepository.findAll().stream()
+                .filter(p -> p.getOrderDate().isEqual(LocalDate.of(2022, 4, 10))).count();
+        double result = orderRepository.findAll().stream()
+                .filter(p -> p.getOrderDate().isEqual(LocalDate.of(2022, 4, 10)))
+                .flatMapToDouble(p -> DoubleStream.of(p.getProducts().stream().mapToDouble(s -> s.getPrice()).sum())).sum()/count;
+        log.info("Средняя цена = " + result);
     }
+
 
     @Test
     @DisplayName("tack11: Получить сводную статистику по всем товарам категории \"Книги\"")
     void tack11() {
-        //DoubleSummaryStatistics statistics = null;
-        //TODO
-        //log.info("count = {}, average = {}, max = {}, min = {}, sum = {}", statistics.getCount(), statistics.getAverage(), statistics.getMax(), statistics.getMin(), statistics.getSum());
+        DoubleSummaryStatistics statistics = productRepository.findAll().stream()
+                .filter(p -> "Книги".equals(p.getCategory()))
+                .mapToDouble(Product::getPrice)
+                .summaryStatistics();
+
+        log.info("count = {}, average = {}, max = {}, min = {}, sum = {}",
+                statistics.getCount(),
+                statistics.getAverage(),
+                statistics.getMax(),
+                statistics.getMin(),
+                statistics.getSum());
     }
 
     @Test
@@ -167,38 +193,61 @@ class StreamApplicationTests {
         //Map<Long, Integer> result = null;
         //TODO
         //log.info(result.toString());
+        Map<Long, Integer> result = null;
+        result = orderRepository.findAll().stream().collect(Collectors.toMap(s->s.getId(),p->p.getProducts().size()));
+        log.info(result.toString());
     }
 
     @Test
     @DisplayName("tack13: Получить ассоциативный массив данных customer список orders")
     void tack13() {
-        //Map<Customer, List<Order>> result = null;
-        //TODO
-        //log.info(result.toString());
+        Map<Customer, List<Order>> result = orderRepository.findAll().stream()
+                .collect(Collectors.groupingBy(Order::getCustomer));
+
+        log.info(result.toString());
     }
 
+
     @Test
-    @DisplayName("tack14: Получить ассоциативный массив данных customer_id и список order_id)")
+    @DisplayName("tack14: Получить ассоциативный массив данных customer_id и список order_id")
     void tack14() {
-        //HashMap<Long, List<Long>> result = null;
-        //TODO
-        //log.info(result.toString());
+        Map<Long, List<Long>> result = orderRepository.findAll().stream()
+                .collect(Collectors.groupingBy(
+                        order -> order.getCustomer().getId(),
+                        Collectors.mapping(Order::getId, Collectors.toList())
+                ));
+
+        log.info(result.toString());
     }
+
 
     @Test
     @DisplayName("tack15: Получить ассоциативный массив данных с указанием заказа и его общей цены")
     void tack15() {
-        //Map<Order, Double> result = null;
-        //TODO
-        //log.info(result.toString());
+        Map<Order, Double> result = orderRepository.findAll().stream()
+                .collect(Collectors.toMap(
+                        order -> order,
+                        order -> order.getProducts().stream()
+                                .mapToDouble(Product::getPrice)
+                                .sum()
+                ));
+
+        log.info(result.toString());
     }
+
 
     @Test
     @DisplayName("tack16: Получить ассоциативный массив данных с указанием заказа и его общей цены используя reduce")
     void tack16() {
-        //Map<Long, Double> result = null;
-        //TODO
-        //log.info(result.toString());
+        Map<Long, Double> result = orderRepository.findAll().stream()
+                .collect(Collectors.toMap(
+                        Order::getId,
+                        order -> order.getProducts().stream()
+                                .map(Product::getPrice)
+                                .reduce(0.0, Double::sum)
+                ));
+
+        log.info(result.toString());
     }
 
     @Test
@@ -207,6 +256,12 @@ class StreamApplicationTests {
         //Map<String, List<String>> result = null:
         //TODO
         //log.info(result.toString());
+        Map<String, List<String>> result = null;
+        result = productRepository.findAll().stream()
+                .collect(Collectors
+                        .groupingBy(Product::getCategory,
+                                Collectors.mapping(Product::getName,Collectors.toList())));
+        log.info(result.toString());
     }
 
     @Test
@@ -215,21 +270,34 @@ class StreamApplicationTests {
         //Map<String, Optional<Product>> result = null;
         //TODO
         //log.info(result.toString());
+        Map<String, Optional<Product>> result = null;
+        result = productRepository.findAll().stream()
+                .collect(Collectors
+                        .groupingBy(Product::getCategory, Collectors.maxBy(Comparator.comparing(Product::getPrice))));
+        log.info(result.toString());
     }
 
     @Test
     @DisplayName("tack19: Получить самый дорогой товар (по наименованию) в каждой категории")
     void tack19() {
-        //Map<String, String> result = null;
-        //TODO Пример: {Книги=Хоббит, Товары для дома=Стул, Электроника=Монитор, Игры=Маджонг, Одежда=Парка}
-        //log.info(result.toString());
+        Map<String, String> result = productRepository.findAll().stream()
+                .collect(Collectors.groupingBy(
+                        Product::getCategory,
+                        Collectors.collectingAndThen(
+                                Collectors.maxBy(Comparator.comparing(Product::getPrice)),
+                                productOptional -> productOptional.map(Product::getName).orElse("Не найдено")
+                        )
+                ));
+
+        log.info(result.toString());
     }
 
     @Test
     @DisplayName("tack20: Рассчитайте общую сумму всех заказов за все время")
     void tack20() {
-        //double result;
-        //TODO
-        //log.info("Общая сумма  = " + result);
+
+        double result = orderRepository.findAll().stream()
+                .mapToDouble(s->s.getProducts().stream().mapToDouble(Product::getPrice).sum()).sum();
+        log.info("Общая сумма  = " + result);
     }
 }
